@@ -1,5 +1,5 @@
 import streamlit as st
 
-st.title('🎈 App Name')
+st.title('📊 Financial Assessment and EMI Prediction Project')
 
-st.write('Hello world!')
+st.info('This app conducts exploratory data analysis and predicts EMI amount and eligibility')
