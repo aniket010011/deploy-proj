@@ -15,8 +15,8 @@ xgbc_model = joblib.load('xgboost_classifier_model.pkl')
 # Regression models
 lnr_model = joblib.load('linear_regression_model.pkl')
 '''rfr_model = joblib.load('random_forest_model.pkl')'''
-xgbr_model = joblib.load('xgboost_model.pkl')
-lgbr_model = joblib.load('lgbm_model.pkl')
+xgbr_model = joblib.load('xgboost_regressor_model.pkl')
+lgbr_model = joblib.load('lgbm_regressor_model.pkl')
 
 # ----------------------------
 # App title
@@ -143,4 +143,5 @@ elif task == "Max EMI (Regression)":
 
         avg_pred = np.mean([pred_lnr, pred_xgbr, pred_lgbr])
         st.success(f"💡 Recommended Max EMI: **₹{avg_pred:,.2f}**")
+
 
