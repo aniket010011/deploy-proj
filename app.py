@@ -9,12 +9,12 @@ import joblib
 
 # Classification models
 lgr_model= joblib.load('logistic_regression_model.pkl')
-rfc_model = joblib.load('random_forest_classifier_model.pkl')
+'''rfc_model = joblib.load('random_forest_classifier_model.pkl')'''
 xgbc_model = joblib.load('xgboost_classifier_model.pkl')
 
 # Regression models
 lnr_model = joblib.load('linear_regression_model.pkl')
-rfr_model = joblib.load('random_forest_model.pkl')
+'''rfr_model = joblib.load('random_forest_model.pkl')'''
 xgbr_model = joblib.load('xgboost_model.pkl')
 lgbr_model = joblib.load('lgbm_model.pkl')
 
@@ -110,7 +110,7 @@ if task == "EMI Eligibility (Classification)":
     if st.button("🔮 Predict EMI Eligibility"):
         # Predict using all classification models
         pred_lr = lgr_model.predict(input_data)[0]
-        pred_rf = rfc_model.predict(input_data)[0]
+        '''pred_rf = rfc_model.predict(input_data)[0]'''
         pred_xgb = xgbc_model.predict(input_data)[0]
 
         st.write("### 🔍 Model Predictions:")
@@ -119,7 +119,7 @@ if task == "EMI Eligibility (Classification)":
         st.write(f"**XGBoost:** {pred_xgbc}")
 
         # Compute majority vote
-        preds = [pred_lgr, pred_rfc, pred_xgbc]
+        preds = [pred_lgr, pred_xgbc]
         final_pred = max(set(preds), key=preds.count)
         st.success(f"💡 Final EMI Eligibility Decision: **{final_pred}**")
 
@@ -131,15 +131,16 @@ elif task == "Max EMI (Regression)":
 
     if st.button("💰 Predict Max EMI"):
         pred_lr = lnr_model.predict(input_data)[0]
-        pred_rf = rfr_model.predict(input_data)[0]
+        '''pred_rf = rfr_model.predict(input_data)[0]'''
         pred_xgb = xgbr_model.predict(input_data)[0]
         pred_lgb = lgbr_model.predict(input_data)[0]
 
         st.write("### 🔍 Model Predictions (₹):")
         st.write(f"**Linear Regression:** ₹{pred_lnr:,.2f}")
-        st.write(f"**Random Forest:** ₹{pred_rfr:,.2f}")
+        '''st.write(f"**Random Forest:** ₹{pred_rfr:,.2f}")'''
         st.write(f"**XGBoost:** ₹{pred_xgbr:,.2f}")
         st.write(f"**LightGBM:** ₹{pred_lgbr:,.2f}")
 
-        avg_pred = np.mean([pred_lnr, pred_rfr, pred_xgbr, pred_lgbr])
+        avg_pred = np.mean([pred_lnr, pred_xgbr, pred_lgbr])
         st.success(f"💡 Recommended Max EMI: **₹{avg_pred:,.2f}**")
+
