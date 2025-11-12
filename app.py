@@ -1,4 +1,9 @@
 import streamlit as st
+import sklearn.compose._column_transformer as ct
+if not hasattr(ct, "_RemainderColsList"):
+    class _RemainderColsList(list):
+        pass
+    ct._RemainderColsList = _RemainderColsList
 import pandas as pd
 import numpy as np
 import joblib
@@ -174,5 +179,6 @@ elif menu == "💵 Max EMI Prediction (Regression)":
             model = models[reg_choice]
             pred = model.predict(input_data)[0]
             st.success(f"💵 Estimated Maximum Affordable EMI: ₹{pred:,.2f}")
+
 
 
