@@ -46,22 +46,37 @@ models, label_encoder = load_models()
 # Utility: Ensure all columns expected by model are present
 # =============================================================
 def align_columns(input_df, model):
-    """Add missing columns (as NaN) and drop unexpected ones."""
+    """Add missing columns (as NaN/'Unknown') and drop unexpected ones."""
+    input_df = input_df.copy()
+
+    # Try to get expected feature names
     try:
         expected_cols = model.feature_names_in_
     except AttributeError:
-        # Fallback: get from pipeline transformer if available
         try:
             expected_cols = model.named_steps['preprocessor'].get_feature_names_out()
         except Exception:
             expected_cols = input_df.columns  # fallback
-    input_df = input_df.copy()
+
+    # Ensure all expected columns exist
     for col in expected_cols:
         if col not in input_df.columns:
-            input_df[col] = np.nan
-    # Keep only expected columns
-    return input_df[expected_cols]
+            # Use 'Unknown' for object-type features, np.nan otherwise
+            input_df[col] = "Unknown"
 
+    # Keep only expected columns
+    input_df = input_df.reindex(columns=expected_cols, fill_value="Unknown")
+
+    # Convert numeric-like columns to numeric (avoiding str nan)
+    for col in input_df.columns:
+        # If all values look numeric or nan
+        if input_df[col].dtype == object:
+            try:
+                input_df[col] = pd.to_numeric(input_df[col])
+            except Exception:
+                pass  # keep as string if fails
+
+    return input_df
 # =============================================================
 # Sidebar Menu
 # =============================================================
@@ -90,3 +105,4 @@ if menu == "📊 EDA":
         st.write("### Missing Values (%)")
         missing = df.isnull().mean() * 100
         missing = missi
+
