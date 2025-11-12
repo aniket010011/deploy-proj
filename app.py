@@ -20,12 +20,11 @@ def load_models():
     models = {}
     try:
         models["Logistic Regression"] = joblib.load("logistic_regression_pipeline.pkl")
-        models["Random Forest Classifier"] = joblib.load("random_forest_classifier_pipeline.pkl")
+        models["LGBM Classifier"] = joblib.load("lgbm_classifier_pipeline.pkl")
         models["XGBoost Classifier"] = joblib.load("xgboost_classifier_pipeline.pkl")
         models["Linear Regression"] = joblib.load("linear_regression_pipeline.pkl")
-        models["Random Forest Regressor"] = joblib.load("random_forest_regressor_pipeline.pkl")
+        models["LGBM Regressor"] = joblib.load("lgbm_regressor_pipeline.pkl")
         models["XGBoost Regressor"] = joblib.load("xgboost_regressor_pipeline.pkl")
-        models["LightGBM Regressor"] = joblib.load("lightgbm_regressor_pipeline.pkl")
         label_encoder = joblib.load("emi_label_encoder.pkl")
     except Exception as e:
         st.error(f"Error loading models: {e}")
@@ -97,7 +96,7 @@ elif menu == "🎯 EMI Eligibility Prediction (Classification)":
     else:
         classifier_choice = st.selectbox(
             "Select Classification Model",
-            ["Logistic Regression", "Random Forest Classifier", "XGBoost Classifier"]
+            ["Logistic Regression", "XGBoost Classifier", "LightGBM Classifier"]
         )
 
         st.subheader("Enter Applicant Details")
@@ -149,7 +148,7 @@ elif menu == "💵 Max EMI Prediction (Regression)":
     else:
         reg_choice = st.selectbox(
             "Select Regression Model",
-            ["Linear Regression", "Random Forest Regressor", "XGBoost Regressor", "LightGBM Regressor"]
+            ["Linear Regression", "XGBoost Regressor", "LightGBM Regressor"]
         )
 
         st.subheader("Enter Applicant Financial Details")
@@ -175,3 +174,4 @@ elif menu == "💵 Max EMI Prediction (Regression)":
             model = models[reg_choice]
             pred = model.predict(input_data)[0]
             st.success(f"💵 Estimated Maximum Affordable EMI: ₹{pred:,.2f}")
+
