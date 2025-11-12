@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import classification_report, r2_score, mean_absolute_error, mean_squared_error
@@ -175,3 +177,4 @@ elif menu == "💵 Max EMI Prediction (Regression)":
             model = models[reg_choice]
             pred = model.predict(input_data)[0]
             st.success(f"💵 Estimated Maximum Affordable EMI: ₹{pred:,.2f}")
+
