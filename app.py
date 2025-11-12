@@ -1,12 +1,17 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import classification_report, r2_score, mean_absolute_error, mean_squared_error
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+import xgboost as xgb
+import lightgbm as lgb
 
 # =============================================================
 # Page Setup
@@ -15,27 +20,65 @@ st.set_page_config(page_title="EMI Prediction App", layout="wide")
 st.title("💰 EMI Prediction & Analysis App")
 
 # =============================================================
-# Load Models and Label Encoder
+# Preprocessor setup (for pipelines)
 # =============================================================
-@st.cache_resource
-def load_models():
-    models = {}
-    try:
-        models["Logistic Regression"] = joblib.load("logistic_regression_pipeline.pkl")
-        models["Random Forest Classifier"] = joblib.load("random_forest_classifier_pipeline.pkl")
-        models["XGBoost Classifier"] = joblib.load("xgboost_classifier_pipeline.pkl")
-        models["Linear Regression"] = joblib.load("linear_regression_pipeline.pkl")
-        models["Random Forest Regressor"] = joblib.load("random_forest_regressor_pipeline.pkl")
-        models["XGBoost Regressor"] = joblib.load("xgboost_regressor_pipeline.pkl")
-        models["LightGBM Regressor"] = joblib.load("lightgbm_regressor_pipeline.pkl")
-        label_encoder = joblib.load("emi_label_encoder.pkl")
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        models, label_encoder = None, None
-    return models, label_encoder
+categorical_features = ["gender", "marital_status", "education", "employment_type", "existing_loans"]
+numeric_features = ["age", "monthly_salary", "years_of_employment", "requested_amount", "requested_tenure",
+                    "current_emi_amount", "credit_score", "bank_balance", "emergency_fund"]
 
+preprocessor = ColumnTransformer([
+    ("num", StandardScaler(), numeric_features),
+    ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features)
+])
 
-models, label_encoder = load_models()
+# =============================================================
+# Classification Pipelines
+# =============================================================
+classification_pipelines = {
+    "Logistic Regression": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", LogisticRegression(max_iter=1000))
+    ]),
+    "Random Forest Classifier": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", RandomForestClassifier(n_estimators=200, random_state=42))
+    ]),
+    "XGBoost Classifier": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", xgb.XGBClassifier(
+            n_estimators=200, learning_rate=0.1, max_depth=6,
+            subsample=0.8, colsample_bytree=0.8,
+            use_label_encoder=False, eval_metric='mlogloss',
+            random_state=42
+        ))
+    ])
+}
+
+# =============================================================
+# Regression Pipelines (dummy / example)
+# =============================================================
+regression_pipelines = {
+    "Linear Regression": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", LinearRegression())
+    ]),
+    "Random Forest Regressor": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", RandomForestRegressor(n_estimators=200, random_state=42))
+    ]),
+    "XGBoost Regressor": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", xgb.XGBRegressor(
+            n_estimators=200, learning_rate=0.1, max_depth=6,
+            subsample=0.8, colsample_bytree=0.8,
+            random_state=42
+        ))
+    ]),
+    "LightGBM Regressor": Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", lgb.LGBMRegressor(n_estimators=500, learning_rate=0.05, max_depth=7, random_state=42))
+    ])
+}
 
 # =============================================================
 # Sidebar Menu
@@ -94,51 +137,45 @@ if menu == "📊 EDA":
 elif menu == "🎯 EMI Eligibility Prediction (Classification)":
     st.header("🎯 EMI Eligibility Prediction")
 
-    if models is None:
-        st.warning("Models not found. Please ensure model files are in the same directory.")
-    else:
-        classifier_choice = st.selectbox(
-            "Select Classification Model",
-            ["Logistic Regression", "Random Forest Classifier", "XGBoost Classifier"]
-        )
+    classifier_choice = st.selectbox(
+        "Select Classification Model",
+        list(classification_pipelines.keys())
+    )
 
-        st.subheader("Enter Applicant Details")
+    st.subheader("Enter Applicant Details")
 
-        # Simple form — adjust based on your dataset
-        age = st.number_input("Age", min_value=18, max_value=75, value=30)
-        gender = st.selectbox("Gender", ["Male", "Female"])
-        marital_status = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
-        education = st.selectbox("Education", ["High School", "Graduate", "Post-Graduate", "Doctorate"])
-        monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
-        employment_type = st.selectbox("Employment Type", ["Salaried", "Self-Employed", "Freelancer"])
-        years_of_employment = st.number_input("Years of Employment", min_value=0.0, step=0.5)
-        requested_amount = st.number_input("Requested Loan Amount (₹)", min_value=0, step=1000)
-        requested_tenure = st.number_input("Requested Tenure (Months)", min_value=6, max_value=360, step=6)
+    age = st.number_input("Age", min_value=18, max_value=75, value=30)
+    gender = st.selectbox("Gender", ["Male", "Female"])
+    marital_status = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
+    education = st.selectbox("Education", ["High School", "Graduate", "Post-Graduate", "Doctorate"])
+    monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
+    employment_type = st.selectbox("Employment Type", ["Salaried", "Self-Employed", "Freelancer"])
+    years_of_employment = st.number_input("Years of Employment", min_value=0.0, step=0.5)
+    requested_amount = st.number_input("Requested Loan Amount (₹)", min_value=0, step=1000)
+    requested_tenure = st.number_input("Requested Tenure (Months)", min_value=6, max_value=360, step=6)
 
-        # Create DataFrame for model input
-        input_data = pd.DataFrame([{
-            "age": age,
-            "gender": gender,
-            "marital_status": marital_status,
-            "education": education,
-            "monthly_salary": monthly_salary,
-            "employment_type": employment_type,
-            "years_of_employment": years_of_employment,
-            "requested_amount": requested_amount,
-            "requested_tenure": requested_tenure
-        }])
+    input_data = pd.DataFrame([{
+        "age": age,
+        "gender": gender,
+        "marital_status": marital_status,
+        "education": education,
+        "monthly_salary": monthly_salary,
+        "employment_type": employment_type,
+        "years_of_employment": years_of_employment,
+        "requested_amount": requested_amount,
+        "requested_tenure": requested_tenure,
+        "current_emi_amount": 0,
+        "credit_score": 0,
+        "bank_balance": 0,
+        "emergency_fund": 0,
+        "existing_loans": "No"
+    }])
 
-        if st.button("Predict Eligibility"):
-            model = models[classifier_choice]
-            pred_encoded = model.predict(input_data)[0]
-            pred_label = label_encoder.inverse_transform([pred_encoded])[0]
-
-            if pred_label == "Eligible":
-                st.success("✅ The applicant is Eligible for EMI.")
-            elif pred_label == "Not_Eligible":
-                st.warning("⚠️ The applicant is Not Eligible for EMI.")
-            else:
-                st.error("🚨 The applicant is High Risk.")
+    if st.button("Predict Eligibility"):
+        model = classification_pipelines[classifier_choice]
+        # Here we use a dummy prediction as the model is not trained
+        st.info("⚠️ Models are defined but not trained. Prediction is simulated.")
+        st.success("✅ Simulated Prediction: Eligible")
 
 # =============================================================
 # 💵 Regression: Max Monthly EMI Prediction
@@ -146,35 +183,38 @@ elif menu == "🎯 EMI Eligibility Prediction (Classification)":
 elif menu == "💵 Max EMI Prediction (Regression)":
     st.header("💵 Maximum Monthly EMI Prediction")
 
-    if models is None:
-        st.warning("Models not found. Please ensure model files are in the same directory.")
-    else:
-        reg_choice = st.selectbox(
-            "Select Regression Model",
-            ["Linear Regression", "Random Forest Regressor", "XGBoost Regressor", "LightGBM Regressor"]
-        )
+    reg_choice = st.selectbox(
+        "Select Regression Model",
+        list(regression_pipelines.keys())
+    )
 
-        st.subheader("Enter Applicant Financial Details")
+    st.subheader("Enter Applicant Financial Details")
 
-        # Example subset of inputs — extend as needed
-        monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
-        current_emi_amount = st.number_input("Current EMI Amount (₹)", min_value=0, step=1000)
-        credit_score = st.number_input("Credit Score", min_value=300, max_value=900, step=10)
-        bank_balance = st.number_input("Bank Balance (₹)", min_value=0, step=1000)
-        emergency_fund = st.number_input("Emergency Fund (₹)", min_value=0, step=1000)
-        existing_loans = st.selectbox("Existing Loans", ["Yes", "No"])
+    monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
+    current_emi_amount = st.number_input("Current EMI Amount (₹)", min_value=0, step=1000)
+    credit_score = st.number_input("Credit Score", min_value=300, max_value=900, step=10)
+    bank_balance = st.number_input("Bank Balance (₹)", min_value=0, step=1000)
+    emergency_fund = st.number_input("Emergency Fund (₹)", min_value=0, step=1000)
+    existing_loans = st.selectbox("Existing Loans", ["Yes", "No"])
 
-        input_data = pd.DataFrame([{
-            "monthly_salary": monthly_salary,
-            "current_emi_amount": current_emi_amount,
-            "credit_score": credit_score,
-            "bank_balance": bank_balance,
-            "emergency_fund": emergency_fund,
-            "existing_loans": existing_loans
-        }])
+    input_data = pd.DataFrame([{
+        "monthly_salary": monthly_salary,
+        "current_emi_amount": current_emi_amount,
+        "credit_score": credit_score,
+        "bank_balance": bank_balance,
+        "emergency_fund": emergency_fund,
+        "existing_loans": existing_loans,
+        "age": 30,
+        "gender": "Male",
+        "marital_status": "Single",
+        "education": "Graduate",
+        "employment_type": "Salaried",
+        "years_of_employment": 5,
+        "requested_amount": 100000,
+        "requested_tenure": 12
+    }])
 
-        if st.button("Predict Max EMI"):
-            model = models[reg_choice]
-            pred = model.predict(input_data)[0]
-            st.success(f"💵 Estimated Maximum Affordable EMI: ₹{pred:,.2f}")
-
+    if st.button("Predict Max EMI"):
+        model = regression_pipelines[reg_choice]
+        st.info("⚠️ Models are defined but not trained. Prediction is simulated.")
+        st.success(f"💵 Simulated Maximum Affordable EMI: ₹50,000")
