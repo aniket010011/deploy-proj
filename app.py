@@ -1,7 +1,8 @@
+# =============================================================
+# EMI Prediction Streamlit App (Final Stable Version)
+# =============================================================
 import streamlit as st
 import sklearn.compose._column_transformer as ct
-
-# --- Patch sklearn version mismatch issue ---
 if not hasattr(ct, "_RemainderColsList"):
     class _RemainderColsList(list):
         pass
@@ -39,44 +40,63 @@ def load_models():
         models, label_encoder = None, None
     return models, label_encoder
 
-
 models, label_encoder = load_models()
 
 # =============================================================
-# Utility: Ensure all columns expected by model are present
+# Helper Function — Align Columns Safely
 # =============================================================
-def align_columns(input_df, model):
-    """Add missing columns (as NaN/'Unknown') and drop unexpected ones."""
+def safe_prepare_input(input_df, model):
+    """Ensure input DataFrame matches training schema safely."""
     input_df = input_df.copy()
 
-    # Try to get expected feature names
+    # Identify expected feature names
     try:
         expected_cols = model.feature_names_in_
     except AttributeError:
         try:
-            expected_cols = model.named_steps['preprocessor'].get_feature_names_out()
+            preprocessor = model.named_steps['preprocessor']
+            expected_cols = []
+            for name, trans, cols in preprocessor.transformers_:
+                if isinstance(cols, list):
+                    expected_cols.extend(cols)
         except Exception:
-            expected_cols = input_df.columns  # fallback
+            expected_cols = input_df.columns.tolist()
 
-    # Ensure all expected columns exist
+    # Identify numeric/categorical columns from pipeline
+    numeric_cols, categorical_cols = [], []
+    try:
+        preprocessor = model.named_steps['preprocessor']
+        for name, trans, cols in preprocessor.transformers_:
+            if 'num' in name.lower():
+                numeric_cols.extend(cols)
+            elif 'cat' in name.lower():
+                categorical_cols.extend(cols)
+    except Exception:
+        # fallback based on dtype
+        numeric_cols = input_df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = [c for c in input_df.columns if c not in numeric_cols]
+
+    # Add missing columns safely
     for col in expected_cols:
         if col not in input_df.columns:
-            # Use 'Unknown' for object-type features, np.nan otherwise
-            input_df[col] = "Unknown"
+            if col in numeric_cols:
+                input_df[col] = 0.0
+            else:
+                input_df[col] = "Unknown"
 
     # Keep only expected columns
-    input_df = input_df.reindex(columns=expected_cols, fill_value="Unknown")
+    input_df = input_df.reindex(columns=expected_cols)
 
-    # Convert numeric-like columns to numeric (avoiding str nan)
-    for col in input_df.columns:
-        # If all values look numeric or nan
-        if input_df[col].dtype == object:
-            try:
-                input_df[col] = pd.to_numeric(input_df[col])
-            except Exception:
-                pass  # keep as string if fails
+    # Enforce correct dtypes
+    for col in numeric_cols:
+        if col in input_df.columns:
+            input_df[col] = pd.to_numeric(input_df[col], errors="coerce").fillna(0)
+    for col in categorical_cols:
+        if col in input_df.columns:
+            input_df[col] = input_df[col].astype(str).fillna("Unknown")
 
     return input_df
+
 # =============================================================
 # Sidebar Menu
 # =============================================================
@@ -86,7 +106,7 @@ menu = st.sidebar.radio(
 )
 
 # =============================================================
-# 📊 Exploratory Data Analysis
+# 📊 EDA Section
 # =============================================================
 if menu == "📊 EDA":
     st.header("📊 Exploratory Data Analysis")
@@ -104,5 +124,118 @@ if menu == "📊 EDA":
         # Missing values
         st.write("### Missing Values (%)")
         missing = df.isnull().mean() * 100
-        missing = missi
+        missing = missing[missing > 0].sort_values(ascending=False)
+        if not missing.empty:
+            fig, ax = plt.subplots()
+            sns.barplot(x=missing.values, y=missing.index, ax=ax)
+            plt.xlabel("Percentage Missing")
+            st.pyplot(fig)
+        else:
+            st.success("No missing values found!")
 
+        # Correlation heatmap
+        st.write("### Correlation Heatmap (Numeric Columns)")
+        num_df = df.select_dtypes(include=np.number)
+        if not num_df.empty:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.heatmap(num_df.corr(), cmap="coolwarm", annot=False, ax=ax)
+            st.pyplot(fig)
+
+        # Gender distribution
+        if "gender" in df.columns:
+            st.write("### Gender Distribution")
+            fig, ax = plt.subplots()
+            sns.countplot(data=df, x="gender", ax=ax)
+            st.pyplot(fig)
+
+# =============================================================
+# 🎯 Classification: EMI Eligibility
+# =============================================================
+elif menu == "🎯 EMI Eligibility Prediction (Classification)":
+    st.header("🎯 EMI Eligibility Prediction")
+
+    if models is None:
+        st.warning("Models not found. Please ensure model files are in the same directory.")
+    else:
+        classifier_choice = st.selectbox(
+            "Select Classification Model",
+            ["Logistic Regression", "XGBoost Classifier", "LGBM Classifier"]
+        )
+
+        st.subheader("Enter Applicant Details")
+
+        # Form inputs (adjustable)
+        age = st.number_input("Age", min_value=18, max_value=75, value=30)
+        gender = st.selectbox("Gender", ["Male", "Female"])
+        marital_status = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
+        education = st.selectbox("Education", ["High School", "Graduate", "Post-Graduate", "Doctorate"])
+        monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
+        employment_type = st.selectbox("Employment Type", ["Salaried", "Self-Employed", "Freelancer"])
+        years_of_employment = st.number_input("Years of Employment", min_value=0.0, step=0.5)
+        requested_amount = st.number_input("Requested Loan Amount (₹)", min_value=0, step=1000)
+        requested_tenure = st.number_input("Requested Tenure (Months)", min_value=6, max_value=360, step=6)
+
+        # Construct input DataFrame
+        input_data = pd.DataFrame([{
+            "age": age,
+            "gender": gender,
+            "marital_status": marital_status,
+            "education": education,
+            "monthly_salary": monthly_salary,
+            "employment_type": employment_type,
+            "years_of_employment": years_of_employment,
+            "requested_amount": requested_amount,
+            "requested_tenure": requested_tenure
+        }])
+
+        if st.button("Predict Eligibility"):
+            model = models[classifier_choice]
+            input_data = safe_prepare_input(input_data, model)
+
+            pred_encoded = model.predict(input_data)[0]
+            pred_label = label_encoder.inverse_transform([int(pred_encoded)])[0]
+
+            if pred_label == "Eligible":
+                st.success("✅ The applicant is Eligible for EMI.")
+            elif pred_label == "Not_Eligible":
+                st.warning("⚠️ The applicant is Not Eligible for EMI.")
+            else:
+                st.error("🚨 The applicant is High Risk.")
+
+# =============================================================
+# 💵 Regression: Max EMI Prediction
+# =============================================================
+elif menu == "💵 Max EMI Prediction (Regression)":
+    st.header("💵 Maximum Monthly EMI Prediction")
+
+    if models is None:
+        st.warning("Models not found. Please ensure model files are in the same directory.")
+    else:
+        reg_choice = st.selectbox(
+            "Select Regression Model",
+            ["Linear Regression", "XGBoost Regressor", "LGBM Regressor"]
+        )
+
+        st.subheader("Enter Applicant Financial Details")
+
+        monthly_salary = st.number_input("Monthly Salary (₹)", min_value=0, step=1000)
+        current_emi_amount = st.number_input("Current EMI Amount (₹)", min_value=0, step=1000)
+        credit_score = st.number_input("Credit Score", min_value=300, max_value=900, step=10)
+        bank_balance = st.number_input("Bank Balance (₹)", min_value=0, step=1000)
+        emergency_fund = st.number_input("Emergency Fund (₹)", min_value=0, step=1000)
+        existing_loans = st.selectbox("Existing Loans", ["Yes", "No"])
+
+        input_data = pd.DataFrame([{
+            "monthly_salary": monthly_salary,
+            "current_emi_amount": current_emi_amount,
+            "credit_score": credit_score,
+            "bank_balance": bank_balance,
+            "emergency_fund": emergency_fund,
+            "existing_loans": existing_loans
+        }])
+
+        if st.button("Predict Max EMI"):
+            model = models[reg_choice]
+            input_data = safe_prepare_input(input_data, model)
+            pred = model.predict(input_data)[0]
+            st.success(f"💵 Estimated Maximum Affordable EMI: ₹{pred:,.2f}")
